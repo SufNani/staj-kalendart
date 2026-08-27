@@ -4,7 +4,9 @@ import Icon from '../../components/ui/Icon'
 import { CATEGORIES, CITIES, makeEvent, formatDayLabel } from '../../data/events'
 import { ORGANIZER } from '../../data/site'
 import { useEvents } from '../../store/EventsContext'
+import { USE_MOCKS } from '../../config'
 import { useProfile } from '../../store/ProfileContext'
+import { useAuth } from '../../store/AuthContext'
 
 const empty = {
   title: '',
@@ -23,16 +25,22 @@ export default function CreateEventPage() {
   const navigate = useNavigate()
   const { addEvent } = useEvents()
   const { organizerReady } = useProfile()
+  const { loading: authLoading } = useAuth()
 
   // Без заполненной анкеты студии создавать событие нельзя (по плану).
+  // Важно: пока сессия восстанавливается (authLoading), profile ещё не
+  // пришёл с сервера — organizerReady в этот момент временно false,
+  // и без проверки authLoading организатора уносило бы обратно ещё
+  // до того, как успевал загрузиться его настоящий профиль.
   useEffect(() => {
-    if (!organizerReady) navigate('/organizer', { replace: true })
-  }, [organizerReady, navigate])
+    if (!authLoading && !organizerReady) navigate('/organizer', { replace: true })
+  }, [authLoading, organizerReady, navigate])
 
   const [form, setForm] = useState(empty)
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
   const [extraDates, setExtraDates] = useState([])
+  const [busy, setBusy] = useState(false)
 
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -70,43 +78,56 @@ function removeExtraDate(index) {
     return ''
   }
 
-  function save(publish) {
+  async function save(publish) {
     const problem = validate(publish)
     if (problem) {
       setError(problem)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
-    const event = makeEvent(form, ORGANIZER, publish)
 
-    // все даты события: основная + дополнительные (для корректного деления
-    // на предстоящие/прошедшие и сортировки)
-    const seats = Number(form.seats) || 0
-    const allDates = [form.date, ...extraDates.map((d) => d.date)].filter(Boolean).sort()
+    setBusy(true)
+    try {
+      if (USE_MOCKS) {
+        const event = makeEvent(form, ORGANIZER, publish)
 
-    extraDates
-      .filter((d) => d.date)
-      .forEach((d, i) => {
-        event.sessions.push({
-          id: `${event.id}-s${i + 2}`,
-          label: `Сеанс ${i + 2}`,
-          dayLabel: formatDayLabel(d.date),
-          timeLabel: d.time || '',
-          isoDate: d.date,
-          free: seats,
-          total: 0,
-        })
-      })
+        // все даты события: основная + дополнительные (для деления
+        // на предстоящие/прошедшие и сортировки)
+        const seats = Number(form.seats) || 0
+        const allDates = [form.date, ...extraDates.map((d) => d.date)].filter(Boolean).sort()
 
-    // основной сеанс тоже помечаем машиночитаемой датой
-    if (event.sessions[0]) event.sessions[0].isoDate = form.date || allDates[0] || ''
-    event.dates = allDates
-    // дата события = самая ранняя из указанных (для карточки/отображения)
-    if (!event.date && allDates[0]) event.date = allDates[0]
+        extraDates
+          .filter((d) => d.date)
+          .forEach((d, i) => {
+            event.sessions.push({
+              id: `${event.id}-s${i + 2}`,
+              label: `Сеанс ${i + 2}`,
+              dayLabel: formatDayLabel(d.date),
+              timeLabel: d.time || '',
+              isoDate: d.date,
+              free: seats,
+              total: 0,
+            })
+          })
 
-    addEvent(event)
-    setToast(publish ? 'Событие опубликовано 🎉' : 'Черновик сохранён')
-    setTimeout(() => navigate('/organizer'), 1000)
+        if (event.sessions[0]) event.sessions[0].isoDate = form.date || allDates[0] || ''
+        event.dates = allDates
+        if (!event.date && allDates[0]) event.date = allDates[0]
+
+        await addEvent(event)
+      } else {
+        // боевой режим: отправляем данные формы на сервер как есть,
+        // перевод в тело запроса делает src/api/mappers.js
+        await addEvent(form)
+      }
+      setToast(publish ? 'Событие опубликовано 🎉' : 'Черновик сохранён')
+      setTimeout(() => navigate('/organizer'), 1000)
+    } catch (err) {
+      setError(err.message || 'Не удалось сохранить событие.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -375,11 +396,11 @@ function removeExtraDate(index) {
             className="kt-formgrid--full"
             style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}
           >
-            <button type="button" className="kt-btn kt-btn--ghost" onClick={() => save(false)}>
+            <button type="button" className="kt-btn kt-btn--ghost" onClick={() => save(false)} disabled={busy}>
               Сохранить черновик
             </button>
-            <button type="submit" className="kt-btn kt-btn--gold kt-btn--lg">
-              Опубликовать событие
+            <button type="submit" className="kt-btn kt-btn--gold kt-btn--lg" disabled={busy}>
+              {busy ? 'Сохраняем…' : 'Опубликовать событие'}
             </button>
           </div>
         </form>

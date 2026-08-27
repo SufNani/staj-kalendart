@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 
 import SiteLayout from './components/layout/SiteLayout';
+import RequireAuth from './components/RequireAuth';
 import LandingPage from './pages/LandingPage';
 import CatalogPage from './pages/CatalogPage';
 import EventPage from './pages/EventPage';
@@ -43,10 +44,15 @@ export default function App() {
           <Route path="/event/:slug" element={<EventPage />} />
           <Route path="/booking-confirmed" element={<BookingConfirmPage />} />
           <Route path="/login" element={<AuthPage />} />
-          <Route path="/client" element={<ClientDashboard />} />
-          <Route path="/organizer" element={<OrganizerDashboard />} />
-          <Route path="/organizer/create" element={<CreateEventPage />} />
-          <Route path="/organizer/event/:slug" element={<EventDetailsPage />} />
+
+          {/* Дальше — только для вошедших. Не вошёл -> редирект на /login */}
+          <Route element={<RequireAuth />}>
+            <Route path="/client" element={<ClientDashboard />} />
+            <Route path="/organizer" element={<OrganizerDashboard />} />
+            <Route path="/organizer/create" element={<CreateEventPage />} />
+            <Route path="/organizer/event/:slug" element={<EventDetailsPage />} />
+          </Route>
+
           <Route path="/collections" element={<CollectionsPage/>} />
           <Route path="/collections/:id" element={<CollectionsPage />} />
           <Route path="/contacts" element={<ContactsPage />} />

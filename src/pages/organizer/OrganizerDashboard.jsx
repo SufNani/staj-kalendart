@@ -10,6 +10,7 @@ import FavoritesSection from '../../components/cabinet/FavoritesSection'
 import { STATUS_LABEL, ORGANIZER } from '../../data/site'
 import { useEvents } from '../../store/EventsContext'
 import { useProfile } from '../../store/ProfileContext'
+import { useAuth } from '../../store/AuthContext'
 
 const NAV = [
   { key: 'profile', label: 'Профиль' },
@@ -26,15 +27,22 @@ export default function OrganizerDashboard() {
   const navigate = useNavigate()
   const { myEvents, historyEvents, removeEvent } = useEvents()
   const { profile, fullName, initials, organizerReady } = useProfile()
+  const { user: authUser } = useAuth()
+  const displayName = authUser?.name || fullName
+  const displayPhone = authUser?.phone || profile.phone
+  const displayInitials = authUser?.initials || initials
   const [active, setActive] = useState('events')
   const [tab, setTab] = useState('upcoming') // вкладки «Мои события»
   const [flagOrg, setFlagOrg] = useState(false) // подсветить анкету при принудительном заходе
 
   const markedDates = new Set([...myEvents, ...historyEvents].map((e) => e.date))
 
-  function onDelete(e) {
-    if (window.confirm(`Удалить событие «${e.title}»?`)) {
-      removeEvent(e.id)
+  async function onDelete(e) {
+    if (!window.confirm(`Удалить событие «${e.title}»?`)) return
+    try {
+      await removeEvent(e.id)
+    } catch (err) {
+      window.alert(err.message || 'Не удалось удалить событие.')
     }
   }
 
@@ -64,7 +72,7 @@ export default function OrganizerDashboard() {
     <div className="kt-container kt-cabinet">
       <Sidebar
         role="Организатора"
-        user={{ name: fullName, email: profile.phone, initials }}
+        user={{ name: displayName, email: displayPhone, initials: displayInitials }}
         items={NAV}
         active={active}
         onSelect={onNav}
@@ -77,7 +85,7 @@ export default function OrganizerDashboard() {
         >
           <div>
             <h1 className="kt-greet__title">Мои события</h1>
-            <p className="kt-greet__sub">{profile.studioName || ORGANIZER.project}</p>
+            <p className="kt-greet__sub">{authUser?.studioName || profile.studioName || ORGANIZER.project}</p>
           </div>
           <button className="kt-btn kt-btn--gold kt-btn--lg" onClick={goCreate}>
             <Icon name="plus" size={18} /> Создать событие

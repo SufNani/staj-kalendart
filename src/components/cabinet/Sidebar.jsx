@@ -1,5 +1,6 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import Icon from '../ui/Icon'
+import { useAuth } from '../../store/AuthContext'
 
 /**
  * props:
@@ -10,6 +11,14 @@ import Icon from '../ui/Icon'
  *  onSelect: (key) => void
  */
 export default function Sidebar({ role, user, items, active, onSelect }) {
+  const navigate = useNavigate()
+  const { logout } = useAuth()
+
+  async function onLogout() {
+    await logout()
+    navigate('/')
+  }
+
   return (
     <aside className="kt-sidebar">
       <div className="kt-sidebar__eyebrow">Личный кабинет</div>
@@ -36,9 +45,9 @@ export default function Sidebar({ role, user, items, active, onSelect }) {
       </nav>
 
       <div className="kt-sidebar__foot">
-        <Link to="/" className="kt-btn kt-btn--ghost kt-btn--block">
+        <button className="kt-btn kt-btn--ghost kt-btn--block" onClick={onLogout}>
           <Icon name="logout" size={18} /> Выйти из аккаунта
-        </Link>
+        </button>
         <button className="kt-btn kt-btn--danger kt-btn--block">Удалить аккаунт</button>
       </div>
     </aside>

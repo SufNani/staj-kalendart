@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import FilterDropdown from './ui/FilterDropdown'
 import Calendar from './ui/Calendar'
 import Icon from './ui/Icon'
 import { CATEGORIES, CITIES, PRICE_RANGES } from '../data/events'
+import { USE_MOCKS } from '../config'
+import { fetchTags, fetchCities } from '../api/events'
 
 // ISO-дата на N дней вперёд от сегодня
 function isoOffset(days = 0) {
@@ -16,6 +18,21 @@ function isoOffset(days = 0) {
  */
 export default function FilterBar({ filters, onChange }) {
   const [citySearch, setCitySearch] = useState('')
+  // в боевом режиме категории и города приходят с сервера
+  // (/api/tags/, /api/event/cities); если не задались — используем
+  // локальные списки, чтобы фильтр не остался пустым
+  const [categories, setCategories] = useState(CATEGORIES)
+  const [cities, setCities] = useState(CITIES)
+
+  useEffect(() => {
+    if (USE_MOCKS) return
+    fetchTags()
+      .then((tags) => tags.length && setCategories(tags.map((t) => t.name)))
+      .catch(() => {})
+    fetchCities()
+      .then((list) => list.length && setCities(list))
+      .catch(() => {})
+  }, [])
 
   const priceLabel = filters.price
     ? PRICE_RANGES.find((p) => p.id === filters.price)?.label
@@ -25,7 +42,7 @@ export default function FilterBar({ filters, onChange }) {
     ? new Date(filters.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
     : null
 
-  const filteredCities = CITIES.filter((c) =>
+  const filteredCities = cities.filter((c) =>
     c.toLowerCase().includes(citySearch.toLowerCase())
   )
 
@@ -43,7 +60,7 @@ export default function FilterBar({ filters, onChange }) {
                 ✕ Сбросить категорию
               </button>
             )}
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <button
                 key={c}
                 className={`kt-menu__item ${filters.category === c ? 'kt-menu__item--active' : ''}`}

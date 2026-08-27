@@ -7,6 +7,7 @@ import InterestsSection from '../../components/cabinet/InterestsSection'
 import HelpSection from '../../components/cabinet/HelpSection'
 import FavoritesSection from '../../components/cabinet/FavoritesSection'
 import { useProfile } from '../../store/ProfileContext'
+import { useAuth } from '../../store/AuthContext'
 import { EVENTS } from '../../data/events'
 import { CURRENT_USER } from '../../data/site'
 
@@ -30,6 +31,12 @@ function isPast(dateStr) {
 export default function ClientDashboard() {
   const [active, setActive] = useState('events')
   const { profile, fullName, initials, bookings, cancelBooking } = useProfile()
+  const { user: authUser } = useAuth()
+  // после реального входа показываем имя/телефон с сервера, а не демо-профиль
+  const displayName = authUser?.name || fullName
+  const displayPhone = authUser?.phone || profile.phone
+  const displayInitials = authUser?.initials || initials
+  const firstName = (authUser?.name || fullName || profile.firstName).split(' ')[0]
 
   const booked = EVENTS.filter((e) => bookings.includes(e.id))
   const upcoming = booked.filter((e) => !isPast(e.date))
@@ -39,7 +46,7 @@ export default function ClientDashboard() {
     <div className="kt-container kt-cabinet">
       <Sidebar
         role="Клиента"
-        user={{ name: fullName, email: profile.phone, initials }}
+        user={{ name: displayName, email: displayPhone, initials: displayInitials }}
         items={NAV}
         active={active}
         onSelect={setActive}
@@ -47,7 +54,7 @@ export default function ClientDashboard() {
 
       <div>
         <div className="kt-panel">
-          <h1 className="kt-greet__title">Привет, {profile.firstName}!</h1>
+          <h1 className="kt-greet__title">Привет, {firstName}!</h1>
           <p className="kt-greet__sub">Добро пожаловать в ваш личный кабинет</p>
         </div>
 

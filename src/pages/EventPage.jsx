@@ -2,14 +2,74 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Cover from '../components/ui/Cover'
 import Icon from '../components/ui/Icon'
+import OrganizerModal from '../components/OrganizerModal'
 import { coverFor, priceLabel } from '../data/events'
 import { useEvents } from '../store/EventsContext'
+import { useProfile } from '../store/ProfileContext'
+import { useAuth } from '../store/AuthContext'
+import { USE_MOCKS } from '../config'
+import { ORGANIZER } from '../data/site'
 
 export default function EventPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
   const { getEvent } = useEvents()
   const event = getEvent(slug)
+  const { profile } = useProfile()
+  const { user: authUser } = useAuth()
+  const [orgModalOpen, setOrgModalOpen] = useState(false)
+
+  /**
+   * Данные для окна об организаторе.
+   *
+   * Демо-режим: если событие принадлежит демо-организатору (event.mine),
+   * берём его реальную (заполненную в ЛК) анкету студии. Для остальных
+   * сид-событий полного профиля у нас просто нет — честно показываем
+   * только то, что есть на карточке, без выдумывания.
+   *
+   * Боевой режим: у API нет ручки «посмотреть чужой публичный профиль
+   * по id» — только свой собственный (GET /api/users/profile). Поэтому
+   * полную анкету можем показать, только если событие создал сам
+   * смотрящий; в остальных случаях — то же самое честное ограничение.
+   * Это стоит поднять с бэкендерами отдельно, если нужно показывать
+   * профиль организатора клиентам по-настоящему.
+   */
+  function organizerInfo() {
+    if (!event) return null
+
+    if (USE_MOCKS && event.mine) {
+      return {
+        name: profile.studioName || ORGANIZER.project,
+        initials: event.orgInitials,
+        logo: profile.studioLogo,
+        city: event.city,
+        about: profile.studioAbout,
+        instagram: profile.instagram,
+        telegram: profile.telegram,
+        vk: profile.vk,
+      }
+    }
+    if (!USE_MOCKS && authUser && event.authorId === authUser.id) {
+      return {
+        name: authUser.studioName || authUser.name,
+        initials: authUser.initials,
+        logo: authUser.studioLogo,
+        city: event.city,
+        about: authUser.studioAbout,
+        instagram: authUser.instagram,
+        telegram: authUser.telegram,
+        vk: authUser.vk,
+      }
+    }
+    // общий случай: полного профиля организатора нам не видно
+    return {
+      name: event.org,
+      initials: event.orgInitials,
+      city: event.city,
+      about: '',
+      incomplete: true,
+    }
+  }
 
   const [sessions, setSessions] = useState(() => event?.sessions.map((s) => ({ ...s })) || [])
   const [selected, setSelected] = useState(() => {
@@ -102,12 +162,22 @@ export default function EventPage() {
 
         {/* Категория */}
         <div className="kt-event__cat">
-          <span className="kt-eventcard__logo">{event.orgInitials}</span>
-          <span>{event.org}</span>
+          <button
+            type="button"
+            className="kt-org-chip"
+            onClick={() => setOrgModalOpen(true)}
+          >
+            <span className="kt-eventcard__logo">{event.orgInitials}</span>
+            <span>{event.org}</span>
+          </button>
           <span style={{ marginLeft: 'auto' }} className="kt-eventcard__age">
             {event.age}
           </span>
         </div>
+
+        {orgModalOpen && (
+          <OrganizerModal organizer={organizerInfo()} onClose={() => setOrgModalOpen(false)} />
+        )}
 
         {/* Тело: описание + запись */}
         <div className="kt-event__body">

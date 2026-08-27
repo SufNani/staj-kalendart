@@ -1,38 +1,56 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../store/AuthContext'
 
 export default function AuthPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = location.state?.from // куда шёл до того, как его перекинуло на вход
+  const { login, register } = useAuth()
   const [mode, setMode] = useState('login') // 'login' | 'register'
+  const [role, setRole] = useState('organizer') // 'organizer' | 'client' — нужно для user_type при регистрации
   const [form, setForm] = useState({
-    firstName: '',
-    lastName: '',
+    name: '',
     phone: '',
     password: '',
     consent: false,
   })
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  function submit(e) {
+  const isLogin = mode === 'login'
+
+  async function submit(e) {
     e.preventDefault()
     setError('')
     if (!form.phone.trim() || !form.password.trim()) {
       setError('Введите телефон и пароль.')
       return
     }
-    if (mode === 'register' && (!form.firstName.trim() || !form.lastName.trim())) {
-      setError('Укажите имя и фамилию.')
+    if (mode === 'register' && !form.name.trim()) {
+      setError('Укажите имя.')
       return
     }
     if (mode === 'register' && !form.consent) {
       setError('Нужно согласие на обработку персональных данных.')
       return
     }
-    // Заглушка: бэкенда нет, просто ведём в кабинет организатора
-    navigate('/organizer')
-  }
 
-  const isLogin = mode === 'login'
+    setBusy(true)
+    try {
+      const payload = { ...form, role }
+      const user = isLogin ? await login(payload) : await register(payload)
+      const homePath = (user?.role || role) === 'organizer' ? '/organizer' : '/client'
+      // возвращаем туда, откуда перекинуло, но только если это его раздел
+      // (иначе, если ролью ошиблись, унесём в правильный кабинет, а не в чужой)
+      const target = from && from.startsWith(homePath) ? from : homePath
+      navigate(target)
+    } catch (err) {
+      setError(err.message || 'Не удалось выполнить вход. Попробуйте ещё раз.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="kt-auth">
@@ -46,36 +64,41 @@ export default function AuthPage() {
           </p>
         </div>
 
+        {/* Роль нужна и при входе, и при регистрации: бэкенд не знает
+            роль по логину/паролю, у него это отдельное поле user_type,
+            которое мы задаём один раз при регистрации. */}
+        <div className="kt-roletabs">
+          <button
+            type="button"
+            className={`kt-roletabs__tab ${role === 'organizer' ? 'is-active' : ''}`}
+            onClick={() => setRole('organizer')}
+          >
+            Я организатор
+          </button>
+          <button
+            type="button"
+            className={`kt-roletabs__tab ${role === 'client' ? 'is-active' : ''}`}
+            onClick={() => setRole('client')}
+          >
+            Я участник
+          </button>
+        </div>
+
         <form className="kt-auth__form" onSubmit={submit}>
           {!isLogin && (
-            <>
-              <div className="kt-field">
-                <label className="kt-field__label" htmlFor="au-first">
-                  Имя
-                </label>
-                <input
-                  id="au-first"
-                  className="kt-input"
-                  autoComplete="given-name"
-                  value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  placeholder="Введите имя"
-                />
-              </div>
-              <div className="kt-field">
-                <label className="kt-field__label" htmlFor="au-last">
-                  Фамилия
-                </label>
-                <input
-                  id="au-last"
-                  className="kt-input"
-                  autoComplete="family-name"
-                  value={form.lastName}
-                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                  placeholder="Введите фамилию"
-                />
-              </div>
-            </>
+            <div className="kt-field">
+              <label className="kt-field__label" htmlFor="au-name">
+                Имя
+              </label>
+              <input
+                id="au-name"
+                className="kt-input"
+                autoComplete="name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Иван Иванов"
+              />
+            </div>
           )}
 
           <div className="kt-field">
@@ -129,8 +152,12 @@ export default function AuthPage() {
             </div>
           )}
 
-          <button type="submit" className="kt-btn kt-btn--gold kt-btn--block kt-btn--lg">
-            {isLogin ? 'Войти' : 'Зарегистрироваться'}
+          <button
+            type="submit"
+            className="kt-btn kt-btn--gold kt-btn--block kt-btn--lg"
+            disabled={busy}
+          >
+            {busy ? 'Подождите…' : isLogin ? 'Войти' : 'Зарегистрироваться'}
           </button>
 
           {isLogin && (
@@ -142,7 +169,7 @@ export default function AuthPage() {
 
         <button
           type="button"
-          className="kt-btn kt-btn--gold kt-btn--block kt-btn--lg"
+          className="kt-btn kt-btn--ghost kt-btn--block kt-btn--lg"
           onClick={() => {
             setError('')
             setMode(isLogin ? 'register' : 'login')

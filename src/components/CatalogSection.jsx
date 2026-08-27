@@ -26,7 +26,7 @@ export default function CatalogSection({ initialCategory = null, id }) {
     city: null,
   })
   const [visible, setVisible] = useState(PAGE)
-  const { publishedEvents } = useEvents()
+  const { publishedEvents, loading, error, reload } = useEvents()
 
   const result = useMemo(
     () => publishedEvents.filter((e) => matches(e, filters)),
@@ -55,7 +55,18 @@ export default function CatalogSection({ initialCategory = null, id }) {
         </p>
 
         <div style={{ marginTop: 32 }}>
-          {result.length === 0 ? (
+          {loading ? (
+            <div className="kt-catalog__empty">Загружаем события…</div>
+          ) : error ? (
+            <div className="kt-catalog__empty">
+              {error}
+              <div style={{ marginTop: 16 }}>
+                <button className="kt-btn kt-btn--gold" onClick={reload}>
+                  Попробовать снова
+                </button>
+              </div>
+            </div>
+          ) : result.length === 0 ? (
             <div className="kt-catalog__empty">
               По вашим фильтрам событий не нашлось. Попробуйте изменить условия поиска.
             </div>

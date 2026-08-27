@@ -1,22 +1,87 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useProfile } from '../../store/ProfileContext'
+import { useAuth } from '../../store/AuthContext'
+import { USE_MOCKS } from '../../config'
 import CityCombobox from '../ui/CityCombobox'
 import AvatarUpload from '../ui/AvatarUpload'
 import Icon from '../ui/Icon'
 
+const EMPTY_DRAFT = {
+  name: '', phone: '', city: '',
+  studioName: '', studioAbout: '', studioLogo: '', instagram: '', telegram: '', vk: '',
+}
+
 /**
  * Профиль. Для организатора дополнительно показывается анкета студии.
  * props: role: 'client' | 'organizer', highlightOrg (подсветить анкету, если пришли на неё принудительно)
+ *
+ * Два режима хранения:
+ *  - демо (USE_MOCKS): всё живёт в ProfileContext (localStorage), сохраняется по каждой правке.
+ *  - боевой: имя/телефон/город/анкета студии реально уходят на сервер
+ *    (PATCH /api/users/profile) через AuthContext, по кнопке «Сохранить».
+ *    Аватар личного профиля в API нет вообще — он и в боевом режиме
+ *    остаётся только в браузере (это не баг, а ограничение бэкенда).
  */
 export default function ProfileSection({ role, highlightOrg = false }) {
-  const { profile, update, initials, organizerReady } = useProfile()
-  const [toast, setToast] = useState('')
+  const { profile, update, initials: mockInitials } = useProfile()
+  const { user: authUser, updateUser } = useAuth()
+  const apiMode = !USE_MOCKS
 
-  function save() {
-    // Данные уже сохраняются в контекст на каждом изменении.
-    setToast('Профиль сохранён')
-    setTimeout(() => setToast(''), 1800)
+  const [draft, setDraft] = useState(EMPTY_DRAFT)
+  const [toast, setToast] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // подтягиваем текущие серверные значения в форму, когда профиль загрузился
+  useEffect(() => {
+    if (apiMode && authUser) {
+      setDraft({
+        name: authUser.name || '',
+        phone: authUser.phone || '',
+        city: authUser.city || '',
+        studioName: authUser.studioName || '',
+        studioAbout: authUser.studioAbout || '',
+        studioLogo: authUser.studioLogo || '',
+        instagram: authUser.instagram || '',
+        telegram: authUser.telegram || '',
+        vk: authUser.vk || '',
+      })
+    }
+  }, [apiMode, authUser])
+
+  const organizerReady = apiMode
+    ? Boolean(authUser?.studioName?.trim()) &&
+      Boolean(authUser?.instagram?.trim() || authUser?.telegram?.trim() || authUser?.vk?.trim())
+    : Boolean(profile.studioName?.trim()) &&
+      Boolean(profile.instagram?.trim() || profile.telegram?.trim() || profile.vk?.trim())
+
+  function setField(key, value) {
+    if (apiMode) setDraft((d) => ({ ...d, [key]: value }))
+    else update({ [key]: value })
   }
+  const val = (key) => (apiMode ? draft[key] : profile[key])
+
+  async function save(patchKeys) {
+    setError('')
+    if (!apiMode) {
+      setToast('Профиль сохранён')
+      setTimeout(() => setToast(''), 1800)
+      return
+    }
+    setBusy(true)
+    try {
+      const patch = Object.fromEntries(patchKeys.map((k) => [k, draft[k]]))
+      await updateUser(patch)
+      setToast('Сохранено на сервере')
+      setTimeout(() => setToast(''), 1800)
+    } catch (err) {
+      setError(err.message || 'Не удалось сохранить.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const initials = apiMode ? authUser?.initials || mockInitials : mockInitials
 
   return (
     <div className="kt-cabsection">
@@ -31,49 +96,78 @@ export default function ProfileSection({ role, highlightOrg = false }) {
           initials={initials}
           label="Загрузить аватар"
         />
+        {apiMode && (
+          <p className="kt-field__hint" style={{ marginTop: 8 }}>
+            Аватар пока хранится только в этом браузере — в API для него нет поля.
+          </p>
+        )}
 
         <div className="kt-formgrid" style={{ marginTop: 22 }}>
-          <div className="kt-field">
-            <label className="kt-field__label" htmlFor="pf-first">Имя</label>
-            <input
-              id="pf-first"
-              className="kt-input"
-              value={profile.firstName}
-              onChange={(e) => update({ firstName: e.target.value })}
-            />
-          </div>
-          <div className="kt-field">
-            <label className="kt-field__label" htmlFor="pf-last">Фамилия</label>
-            <input
-              id="pf-last"
-              className="kt-input"
-              value={profile.lastName}
-              onChange={(e) => update({ lastName: e.target.value })}
-            />
-          </div>
+          {apiMode ? (
+            <div className="kt-field kt-formgrid--full">
+              <label className="kt-field__label" htmlFor="pf-name">Имя</label>
+              <input
+                id="pf-name"
+                className="kt-input"
+                value={draft.name}
+                onChange={(e) => setField('name', e.target.value)}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="kt-field">
+                <label className="kt-field__label" htmlFor="pf-first">Имя</label>
+                <input
+                  id="pf-first"
+                  className="kt-input"
+                  value={profile.firstName}
+                  onChange={(e) => update({ firstName: e.target.value })}
+                />
+              </div>
+              <div className="kt-field">
+                <label className="kt-field__label" htmlFor="pf-last">Фамилия</label>
+                <input
+                  id="pf-last"
+                  className="kt-input"
+                  value={profile.lastName}
+                  onChange={(e) => update({ lastName: e.target.value })}
+                />
+              </div>
+            </>
+          )}
           <div className="kt-field">
             <label className="kt-field__label" htmlFor="pf-phone">Телефон</label>
             <input
               id="pf-phone"
               type="tel"
               className="kt-input"
-              value={profile.phone}
-              onChange={(e) => update({ phone: e.target.value })}
+              value={val('phone')}
+              onChange={(e) => setField('phone', e.target.value)}
             />
           </div>
           <div className="kt-field">
             <label className="kt-field__label" htmlFor="pf-city">Город</label>
             <CityCombobox
               id="pf-city"
-              value={profile.city}
-              onChange={(v) => update({ city: v })}
+              value={val('city')}
+              onChange={(v) => setField('city', v)}
             />
           </div>
         </div>
 
+        {error && (
+          <div style={{ color: 'var(--kt-danger)', fontSize: 14, fontWeight: 600, marginTop: 12 }}>
+            {error}
+          </div>
+        )}
+
         <div style={{ marginTop: 20 }}>
-          <button className="kt-btn kt-btn--gold" onClick={save}>
-            Сохранить профиль
+          <button
+            className="kt-btn kt-btn--gold"
+            disabled={busy}
+            onClick={() => save(['name', 'phone', 'city'])}
+          >
+            {busy ? 'Сохраняем…' : 'Сохранить профиль'}
           </button>
         </div>
       </div>
@@ -97,8 +191,8 @@ export default function ProfileSection({ role, highlightOrg = false }) {
           </p>
 
           <AvatarUpload
-            value={profile.studioLogo}
-            onChange={(v) => update({ studioLogo: v })}
+            value={val('studioLogo')}
+            onChange={(v) => setField('studioLogo', v)}
             initials="лого"
             label="Логотип студии"
           />
@@ -111,8 +205,8 @@ export default function ProfileSection({ role, highlightOrg = false }) {
               <input
                 id="pf-studio"
                 className="kt-input"
-                value={profile.studioName}
-                onChange={(e) => update({ studioName: e.target.value })}
+                value={val('studioName')}
+                onChange={(e) => setField('studioName', e.target.value)}
                 placeholder="Гончарная мастерская «art day»"
               />
             </div>
@@ -121,8 +215,8 @@ export default function ProfileSection({ role, highlightOrg = false }) {
               <textarea
                 id="pf-about"
                 className="kt-textarea"
-                value={profile.studioAbout}
-                onChange={(e) => update({ studioAbout: e.target.value })}
+                value={val('studioAbout')}
+                onChange={(e) => setField('studioAbout', e.target.value)}
                 placeholder="Чем занимается студия, для кого мероприятия."
               />
             </div>
@@ -132,8 +226,8 @@ export default function ProfileSection({ role, highlightOrg = false }) {
               <input
                 id="pf-ig"
                 className="kt-input"
-                value={profile.instagram}
-                onChange={(e) => update({ instagram: e.target.value })}
+                value={val('instagram')}
+                onChange={(e) => setField('instagram', e.target.value)}
                 placeholder="@studio"
               />
             </div>
@@ -142,8 +236,8 @@ export default function ProfileSection({ role, highlightOrg = false }) {
               <input
                 id="pf-tg"
                 className="kt-input"
-                value={profile.telegram}
-                onChange={(e) => update({ telegram: e.target.value })}
+                value={val('telegram')}
+                onChange={(e) => setField('telegram', e.target.value)}
                 placeholder="@studio"
               />
             </div>
@@ -152,16 +246,20 @@ export default function ProfileSection({ role, highlightOrg = false }) {
               <input
                 id="pf-vk"
                 className="kt-input"
-                value={profile.vk}
-                onChange={(e) => update({ vk: e.target.value })}
+                value={val('vk')}
+                onChange={(e) => setField('vk', e.target.value)}
                 placeholder="vk.com/studio"
               />
             </div>
           </div>
 
           <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
-            <button className="kt-btn kt-btn--gold" onClick={save}>
-              Сохранить анкету
+            <button
+              className="kt-btn kt-btn--gold"
+              disabled={busy}
+              onClick={() => save(['studioName', 'studioAbout', 'studioLogo', 'instagram', 'telegram', 'vk'])}
+            >
+              {busy ? 'Сохраняем…' : 'Сохранить анкету'}
             </button>
             {organizerReady && (
               <span style={{ color: 'var(--kt-free)', fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}>

@@ -1,12 +1,9 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import CatalogSection from '../components/CatalogSection'
-import Icon from '../components/ui/Icon'
-import { COLLECTIONS } from '../data/site'
-import { EVENTS, EVENT_IMAGES } from '../data/events'
-import heroConcert from '../assets/events/concert.png'
-import heroPottery from '../assets/events/pottery.png'
-import heroDance from '../assets/events/dance.png'
+import { buildCollections } from '../data/events'
+import heroShapeLeft from '../assets/hero/hero-shape-left.svg'
+import heroShapeRight from '../assets/hero/hero-shape-right.svg'
 
 // склонение: 1 событие, 2 события, 5 событий
 function pluralEvents(n) {
@@ -20,8 +17,7 @@ function pluralEvents(n) {
 
 function CollectionCard({ c }) {
   const navigate = useNavigate()
-  const count = EVENTS.filter((e) => c.categories.includes(e.category)).length
-  const go = () => navigate(`/catalog?category=${encodeURIComponent(c.categories[0])}`)
+  const go = () => navigate(`/catalog?category=${encodeURIComponent(c.category)}`)
   return (
     <article
       className="kt-collection"
@@ -31,11 +27,11 @@ function CollectionCard({ c }) {
       onKeyDown={(e) => e.key === 'Enter' && go()}
     >
       <div className="kt-collection__media">
-        <img src={EVENT_IMAGES[c.image]} alt={c.title} loading="lazy" />
+        <img src={c.image} alt={c.title} loading="lazy" />
       </div>
       <div className="kt-collection__body">
         <h3 className="kt-collection__title">{c.title}</h3>
-        <div className="kt-collection__count">{pluralEvents(count)}</div>
+        <div className="kt-collection__count">{pluralEvents(c.count)}</div>
       </div>
     </article>
   )
@@ -44,6 +40,7 @@ function CollectionCard({ c }) {
 function CollectionsCarousel() {
   const trackRef = useRef(null)
   const [index, setIndex] = useState(0)
+  const collections = buildCollections()
 
   function scrollToCard(i) {
     const track = trackRef.current
@@ -52,18 +49,11 @@ function CollectionsCarousel() {
     if (card) track.scrollTo({ left: card.offsetLeft - track.offsetLeft, behavior: 'smooth' })
   }
 
-  function next() {
-    const i = (index + 1) % COLLECTIONS.length
-    setIndex(i)
-    scrollToCard(i)
-  }
-
   // синхронизируем точки со скроллом (например, свайп на телефоне)
   function onScroll() {
     const track = trackRef.current
     if (!track) return
     const cards = Array.from(track.children)
-    const mid = track.scrollLeft + track.clientWidth / 2
     let best = 0
     let bestDist = Infinity
     cards.forEach((card, i) => {
@@ -80,17 +70,13 @@ function CollectionsCarousel() {
   return (
     <div className="kt-carousel">
       <div className="kt-carousel__track" ref={trackRef} onScroll={onScroll}>
-        {COLLECTIONS.map((c) => (
+        {collections.map((c) => (
           <CollectionCard key={c.id} c={c} />
         ))}
       </div>
 
-      <button className="kt-carousel__arrow" onClick={next} aria-label="Следующая подборка">
-        <Icon name="arrowRight" size={20} />
-      </button>
-
       <div className="kt-carousel__dots">
-        {COLLECTIONS.map((c, i) => (
+        {collections.map((c, i) => (
           <button
             key={c.id}
             className={`kt-carousel__dot ${i === index ? 'is-active' : ''}`}
@@ -111,26 +97,25 @@ export default function LandingPage() {
     <>
       {/* Герой */}
       <section className="kt-hero">
-        <div className="kt-container kt-hero__inner">
-          <div className="kt-hero__card">
-            <h1 className="kt-hero__title">
-              КалендАрт — это онлайн-календарь мастер-классов и событий
-            </h1>
-            <p className="kt-hero__text">
-              Находите мастер-классы по душе, пробуйте новое и создавайте свои события.
-              КалендАрт помогает наполнить жизнь яркими моментами без лишней суеты. Всё, что
-              нужно для вдохновения, развития и новых знакомств — в одном месте.
-            </p>
-            <Link to="/catalog" className="kt-btn kt-btn--gold kt-btn--lg">
-              Перейти в каталог
-            </Link>
-          </div>
+        <img src={heroShapeLeft} alt="" className="kt-hero__shape kt-hero__shape--left" aria-hidden="true" />
+        <img src={heroShapeRight} alt="" className="kt-hero__shape kt-hero__shape--right" aria-hidden="true" />
 
-          <div className="kt-hero__collage" aria-hidden="true">
-            <img src={heroConcert} alt="" className="kt-hero__photo kt-hero__photo--1" />
-            <img src={heroPottery} alt="" className="kt-hero__photo kt-hero__photo--2" />
-            <img src={heroDance} alt="" className="kt-hero__photo kt-hero__photo--3" />
-          </div>
+        <div className="kt-container kt-hero__inner">
+          <h1 className="kt-hero__title">
+            КалендАрт — это онлайн-календарь мастер-классов и событий
+          </h1>
+          <p className="kt-hero__text">
+            Находите мастер-классы по душе, пробуйте новое и создавайте свои события.
+            <br />
+            КалендАрт помогает наполнить жизнь яркими моментами без лишней суеты.
+            <br />
+            Всё, что нужно для вдохновения, развития
+            <br />
+            и новых знакомств — в одном месте.
+          </p>
+          <Link to="/catalog" className="kt-hero__cta">
+            Перейти в каталог
+          </Link>
         </div>
       </section>
 

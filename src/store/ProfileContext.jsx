@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import { CURRENT_USER, ORGANIZER } from '../data/site'
+import { USE_MOCKS } from '../config'
+import { useAuth } from './AuthContext'
 
 /* ============================================================
    Профиль пользователя в ЛК (демо, без бэкенда).
@@ -55,6 +57,7 @@ const DEFAULT = {
 const ProfileContext = createContext(null)
 
 export function ProfileProvider({ children }) {
+  const { user: authUser } = useAuth()
   const [profile, setProfile] = useState(() => ({ ...DEFAULT, ...(load() || {}) }))
 
   const update = useCallback((patch) => {
@@ -108,14 +111,17 @@ export function ProfileProvider({ children }) {
 
   // Анкета организатора считается заполненной, если есть название студии
   // и хотя бы одна ссылка на соцсеть (по плану).
-  const organizerReady = useMemo(
-    () =>
-      Boolean(profile.studioName?.trim()) &&
-      Boolean(
-        profile.instagram?.trim() || profile.telegram?.trim() || profile.vk?.trim()
-      ),
-    [profile.studioName, profile.instagram, profile.telegram, profile.vk]
-  )
+  // В боевом режиме смотрим на реальный профиль с сервера (authUser),
+  // а не на локальный — иначе после настоящего входа организатора,
+  // который ещё не открывал этот браузер, форму создания события
+  // блокировало бы навсегда.
+  const organizerReady = useMemo(() => {
+    const src = !USE_MOCKS && authUser ? authUser : profile
+    return (
+      Boolean(src.studioName?.trim()) &&
+      Boolean(src.instagram?.trim() || src.telegram?.trim() || src.vk?.trim())
+    )
+  }, [authUser, profile.studioName, profile.instagram, profile.telegram, profile.vk])
 
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ')
   const initials =

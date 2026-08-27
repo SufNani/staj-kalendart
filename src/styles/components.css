@@ -798,3 +798,150 @@
 .kt-pwd .kt-input {
   padding-right: 40px;
 }
+
+/* ---------- Переключатель роли на экране входа/регистрации ---------- */
+.kt-roletabs {
+  display: flex;
+  gap: 6px;
+  background: var(--kt-cream-2);
+  border-radius: var(--kt-r-pill);
+  padding: 5px;
+  margin-bottom: 22px;
+}
+.kt-roletabs__tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: var(--kt-r-pill);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--kt-ink-soft);
+  transition: background var(--kt-ease), color var(--kt-ease);
+}
+.kt-roletabs__tab.is-active {
+  background: var(--kt-white);
+  color: var(--kt-ink);
+  box-shadow: var(--kt-shadow-card);
+}
+
+/* ---------- Экран ожидания при проверке авторизации ---------- */
+.kt-authgate {
+  min-height: 50vh;
+  display: grid;
+  place-items: center;
+  color: var(--kt-ink-soft);
+  font-size: 15px;
+}
+
+/* ---------- Модальное окно с информацией об организаторе ---------- */
+.kt-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(67, 53, 42, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.kt-modal {
+  position: relative;
+  background: var(--kt-white);
+  border-radius: var(--kt-r-lg);
+  box-shadow: var(--kt-shadow-pop);
+  padding: 32px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.kt-modal__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--kt-ink-soft);
+  transition: background var(--kt-ease), color var(--kt-ease);
+}
+.kt-modal__close:hover {
+  background: var(--kt-cream-2);
+  color: var(--kt-ink);
+}
+.kt-modal__org-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-right: 30px;
+}
+.kt-modal__org-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--kt-pink-soft);
+  color: var(--kt-pink-deep);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 18px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.kt-modal__org-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.kt-modal__org-name {
+  font-family: var(--kt-font-display);
+  font-weight: 700;
+  font-size: 19px;
+  color: var(--kt-ink);
+}
+.kt-modal__org-city {
+  color: var(--kt-ink-soft);
+  font-size: 14px;
+  margin-top: 2px;
+}
+.kt-modal__org-about {
+  color: var(--kt-ink);
+  font-size: 14px;
+  line-height: 1.65;
+  margin-bottom: 20px;
+  white-space: pre-line;
+}
+.kt-modal__org-socials {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--kt-line);
+}
+.kt-modal__org-socials a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--kt-pink);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Кликабельный чип организатора на странице события */
+.kt-org-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: opacity var(--kt-ease);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.kt-org-chip:hover {
+  opacity: 0.75;
+}

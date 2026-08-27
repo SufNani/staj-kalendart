@@ -459,3 +459,30 @@ export function makeEvent(form, organizer, publish = true) {
     status: publish ? 'published' : 'draft',
   }
 }
+
+/**
+ * Подборки на лендинге и на странице «Все подборки».
+ * Формируются автоматически: одна подборка = одна категория из
+ * CATEGORIES, у которой есть хотя бы одно событие. Ничего не задаётся
+ * руками — добавили событие новой категории, появилась и подборка.
+ *
+ * Обложка берётся из первого попавшегося события этой категории
+ * (реальное фото, а не произвольная картинка), количество — честный
+ * подсчёт по каталогу. Отсортировано по числу событий (сначала самые
+ * наполненные категории).
+ */
+export function buildCollections() {
+  return CATEGORIES.map((category) => {
+    const matches = EVENTS.filter((e) => e.category === category)
+    if (matches.length === 0) return null
+    return {
+      id: slugify(category),
+      title: category,
+      category,
+      count: matches.length,
+      image: matches[0].image,
+    }
+  })
+    .filter(Boolean)
+    .sort((a, b) => b.count - a.count)
+}

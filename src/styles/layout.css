@@ -181,11 +181,13 @@
   color: inherit;
 }
 .kt-footer__cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 40px;
+  display: flex;
+  justify-content: center;
   border-top: 1px solid rgba(61, 42, 92, 0.14);
   padding: 26px 0;
+}
+.kt-footer__col {
+  max-width: 420px;
 }
 .kt-footer__col li {
   color: var(--kt-purple-2);

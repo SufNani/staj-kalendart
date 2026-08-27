@@ -50,11 +50,6 @@ export default function Footer() {
               <li key={line}>{line}</li>
             ))}
           </ul>
-          <ul className="kt-footer__col">
-            {SUPPORT.map((line) => (
-              <li key={`b-${line}`}>{line}</li>
-            ))}
-          </ul>
         </div>
 
         <div className="kt-footer__legal">
