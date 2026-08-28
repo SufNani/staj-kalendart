@@ -50,6 +50,7 @@ export default function App() {
             <Route path="/client" element={<ClientDashboard />} />
             <Route path="/organizer" element={<OrganizerDashboard />} />
             <Route path="/organizer/create" element={<CreateEventPage />} />
+            <Route path="/organizer/create/:slug" element={<CreateEventPage />} />
             <Route path="/organizer/event/:slug" element={<EventDetailsPage />} />
           </Route>
 

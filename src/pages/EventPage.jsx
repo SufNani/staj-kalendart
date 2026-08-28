@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Cover from '../components/ui/Cover'
 import Icon from '../components/ui/Icon'
@@ -9,13 +9,14 @@ import { useProfile } from '../store/ProfileContext'
 import { useAuth } from '../store/AuthContext'
 import { USE_MOCKS } from '../config'
 import { ORGANIZER } from '../data/site'
+import { createGuestPurchase } from '../api/events'
 
 export default function EventPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
   const { getEvent } = useEvents()
   const event = getEvent(slug)
-  const { profile } = useProfile()
+  const { profile, addBooking } = useProfile()
   const { user: authUser } = useAuth()
   const [orgModalOpen, setOrgModalOpen] = useState(false)
 
@@ -71,13 +72,32 @@ export default function EventPage() {
     }
   }
 
-  const [sessions, setSessions] = useState(() => event?.sessions.map((s) => ({ ...s })) || [])
-  const [selected, setSelected] = useState(() => {
-    const firstFree = event?.sessions.find((s) => s.free > 0)
-    return firstFree?.id || null
-  })
+  const [sessions, setSessions] = useState([])
+  const [selected, setSelected] = useState(null)
+
+  /**
+   * Раньше sessions/selected брались из event один раз при самом первом
+   * рендере (через ленивый useState-инициализатор). В боевом режиме
+   * событие приходит с сервера не мгновенно — при заходе на страницу
+   * напрямую (не кликом из уже загруженного каталога, а по прямой
+   * ссылке или после обновления страницы) в момент первого рендера
+   * event ещё не существовал, и sessions навсегда оставался пустым,
+   * даже когда событие потом подгружалось. Форма из-за этого молча
+   * не давала записаться — «сеанс не выбран», хотя сеансы были.
+   *
+   * Пересчитываем при каждой смене event.id — это покрывает и первую
+   * загрузку, и переход между разными событиями кликом (React не
+   * пересоздаёт компонент заново, если меняется только :slug в URL).
+   */
+  useEffect(() => {
+    if (!event) return
+    setSessions(event.sessions.map((s) => ({ ...s })))
+    const firstFree = event.sessions.find((s) => s.free > 0)
+    setSelected(firstFree?.id ?? event.sessions[0]?.id ?? null)
+  }, [event?.id])
   const [form, setForm] = useState({ name: '', contact: '', consent: false })
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   if (!event) {
     return (
@@ -92,7 +112,7 @@ export default function EventPage() {
 
   const activeSession = sessions.find((s) => s.id === selected)
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault()
     setError('')
     if (!activeSession || activeSession.free <= 0) {
@@ -108,23 +128,52 @@ export default function EventPage() {
       return
     }
 
-    // Заглушка бронирования: уменьшаем число свободных мест
-    setSessions((prev) =>
-      prev.map((s) => (s.id === selected ? { ...s, free: s.free - 1 } : s))
-    )
+    setBusy(true)
+    try {
+      if (USE_MOCKS) {
+        // демо: просто уменьшаем число свободных мест и запоминаем
+        // событие в «Моих событиях» клиента
+        setSessions((prev) =>
+          prev.map((s) => (s.id === selected ? { ...s, free: s.free - 1 } : s))
+        )
+        addBooking(event.id)
+      } else {
+        /**
+         * Боевой режим: гостевая запись без регистрации — ровно то, что
+         * нужно по ТЗ (клиент записывается по имени и контакту, без
+         * аккаунта). Ручка: POST /api/purchases/reg-purchase.
+         *
+         * ⚠️ Тариф пока не выбирается в форме — на странице показана
+         * одна цена. Если у события несколько тарифов, берём первый;
+         * настоящий выбор тарифа предстоит добавить отдельно, если
+         * появятся события с более чем одним вариантом цены.
+         */
+        await createGuestPurchase({
+          eventId: event.apiId,
+          tariffId: event.tariffs?.[0]?.id ?? null,
+          eventDateId: activeSession.id,
+          name: form.name.trim(),
+          phone: form.contact.trim(),
+        })
+      }
 
-    navigate('/booking-confirmed', {
-      state: {
-        eventTitle: event.title,
-        org: event.org,
-        city: event.city,
-        address: event.address,
-        session: activeSession,
-        price: event.price,
-        name: form.name,
-        contact: form.contact,
-      },
-    })
+      navigate('/booking-confirmed', {
+        state: {
+          eventTitle: event.title,
+          org: event.org,
+          city: event.city,
+          address: event.address,
+          session: activeSession,
+          price: event.price,
+          name: form.name,
+          contact: form.contact,
+        },
+      })
+    } catch (err) {
+      setError(err.message || 'Не удалось записаться. Попробуйте ещё раз.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -273,8 +322,8 @@ export default function EventPage() {
                 </div>
               )}
 
-              <button type="submit" className="kt-btn kt-btn--gold kt-btn--block kt-btn--lg">
-                Записаться
+              <button type="submit" className="kt-btn kt-btn--gold kt-btn--block kt-btn--lg" disabled={busy}>
+                {busy ? 'Записываем…' : 'Записаться'}
               </button>
             </form>
           </div>

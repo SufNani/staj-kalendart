@@ -102,7 +102,7 @@ export default function EventDetailsPage() {
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Link to="/organizer/create" className="kt-btn kt-btn--gold kt-btn--block">
+            <Link to={`/organizer/create/${event.slug}`} className="kt-btn kt-btn--gold kt-btn--block">
               <Icon name="edit" size={18} /> Редактировать событие
             </Link>
             <button className="kt-btn kt-btn--danger kt-btn--block" onClick={() => setToast('Событие удалено (демо)')}>

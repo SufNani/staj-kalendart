@@ -461,6 +461,97 @@ export function makeEvent(form, organizer, publish = true) {
 }
 
 /**
+ * Правки формы поверх УЖЕ существующего события (демо-редактирование) —
+ * в отличие от makeEvent, сохраняет id/slug/принадлежность, а не создаёт
+ * новое событие с нуля.
+ */
+export function applyFormToEvent(existing, form, publish = true) {
+  const seats = Math.max(0, Number(form.seats) || 0)
+  const price = Math.max(0, Number(form.price) || 0)
+  const firstSession = existing.sessions?.[0]
+  return {
+    ...existing,
+    title: form.title.trim(),
+    category: form.category || existing.category,
+    city: form.city || existing.city,
+    address: form.address?.trim() || existing.address,
+    dateLabel: formatDateLabel(form.date),
+    timeLabel: formatTimeRange(form.time, form.duration),
+    date: form.date || existing.date,
+    price,
+    description: form.description?.trim() || '',
+    image: form.image || existing.image,
+    sessions: [
+      {
+        id: firstSession?.id || `${existing.id}-s1`,
+        label: firstSession?.label || 'Ближайший сеанс',
+        dayLabel: formatDayLabel(form.date),
+        timeLabel: form.time || '',
+        isoDate: form.date || '',
+        free: seats,
+        total: firstSession?.total || 0,
+      },
+      ...(existing.sessions?.slice(1) || []),
+    ],
+    status: publish ? 'published' : 'draft',
+  }
+}
+
+/**
+ * Событие (демо или пришедшее из API) -> объект формы CreateEventPage,
+ * чтобы «Редактировать событие» открывало форму с уже заполненными
+ * данными, а не пустую. Данные о времени/длительности у события хранятся
+ * только в виде готовых подписей (timeLabel и т.п.), поэтому здесь по
+ * возможности вытаскиваем из них исходные значения — лучшее, что можно
+ * сделать без изменения формата хранения событий.
+ */
+export function eventToForm(event) {
+  if (!event) return null
+
+  const sessions = event.sessions || []
+  const first = sessions[0]
+
+  const timeFrom = (label) => (label || '').match(/\d{1,2}:\d{2}/)?.[0] || ''
+  const rawTime = timeFrom(first?.timeLabel) || timeFrom(event.timeLabel)
+
+  let duration = ''
+  const range = (event.timeLabel || '').match(/(\d{1,2}:\d{2}).*?(\d{1,2}:\d{2})/)
+  if (range) {
+    const [h1, m1] = range[1].split(':').map(Number)
+    const [h2, m2] = range[2].split(':').map(Number)
+    const diffHours = (h2 * 60 + m2 - (h1 * 60 + m1)) / 60
+    if (diffHours > 0) duration = String(Math.round(diffHours * 2) / 2)
+  }
+
+  const seats =
+    Number(event.places) ||
+    (first ? (Number(first.free) || 0) + (Number(first.total) || 0) : 0)
+
+  const extraDates = sessions.slice(1).map((s) => ({
+    date: s.isoDate || '',
+    time: timeFrom(s.timeLabel),
+  }))
+
+  return {
+    form: {
+      title: event.title || '',
+      category: event.category || '',
+      tagId: event.tagId ?? null,
+      city: event.city || '',
+      address: event.address && event.address !== '—' ? event.address : '',
+      date: event.date || first?.isoDate || '',
+      time: rawTime,
+      duration,
+      seats: seats ? String(seats) : '',
+      price: event.price != null ? String(event.price) : '',
+      description: event.description || '',
+      image: event.image || '',
+    },
+    extraDates,
+  }
+}
+
+/**
  * Подборки на лендинге и на странице «Все подборки».
  * Формируются автоматически: одна подборка = одна категория из
  * CATEGORIES, у которой есть хотя бы одно событие. Ничего не задаётся

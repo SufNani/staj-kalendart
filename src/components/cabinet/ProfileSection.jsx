@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useProfile } from '../../store/ProfileContext'
 import { useAuth } from '../../store/AuthContext'
 import { USE_MOCKS } from '../../config'
+import { uploadMedia } from '../../api/events'
 import CityCombobox from '../ui/CityCombobox'
 import AvatarUpload from '../ui/AvatarUpload'
 import Icon from '../ui/Icon'
@@ -19,11 +20,12 @@ const EMPTY_DRAFT = {
  *  - демо (USE_MOCKS): всё живёт в ProfileContext (localStorage), сохраняется по каждой правке.
  *  - боевой: имя/телефон/город/анкета студии реально уходят на сервер
  *    (PATCH /api/users/profile) через AuthContext, по кнопке «Сохранить».
- *    Аватар личного профиля в API нет вообще — он и в боевом режиме
- *    остаётся только в браузере (это не баг, а ограничение бэкенда).
+ *    Личного аватара в этой форме нет вообще — в API для него нет
+ *    поля (профиль отдаёт только имя/телефон/город/анкету студии),
+ *    поэтому загрузку убрали, а не оставили работать «только в браузере».
  */
 export default function ProfileSection({ role, highlightOrg = false }) {
-  const { profile, update, initials: mockInitials } = useProfile()
+  const { profile, update } = useProfile()
   const { user: authUser, updateUser } = useAuth()
   const apiMode = !USE_MOCKS
 
@@ -81,8 +83,6 @@ export default function ProfileSection({ role, highlightOrg = false }) {
     }
   }
 
-  const initials = apiMode ? authUser?.initials || mockInitials : mockInitials
-
   return (
     <div className="kt-cabsection">
       <div className="kt-panel">
@@ -90,19 +90,7 @@ export default function ProfileSection({ role, highlightOrg = false }) {
           Профиль
         </div>
 
-        <AvatarUpload
-          value={profile.avatar}
-          onChange={(v) => update({ avatar: v })}
-          initials={initials}
-          label="Загрузить аватар"
-        />
-        {apiMode && (
-          <p className="kt-field__hint" style={{ marginTop: 8 }}>
-            Аватар пока хранится только в этом браузере — в API для него нет поля.
-          </p>
-        )}
-
-        <div className="kt-formgrid" style={{ marginTop: 22 }}>
+        <div className="kt-formgrid" style={{ marginTop: 2 }}>
           {apiMode ? (
             <div className="kt-field kt-formgrid--full">
               <label className="kt-field__label" htmlFor="pf-name">Имя</label>
@@ -195,7 +183,14 @@ export default function ProfileSection({ role, highlightOrg = false }) {
             onChange={(v) => setField('studioLogo', v)}
             initials="лого"
             label="Логотип студии"
+            onUpload={apiMode ? uploadMedia : undefined}
           />
+          {apiMode && (
+            <p className="kt-field__hint" style={{ marginTop: 8 }}>
+              Файл загружается на сервер сразу, а привязывается к профилю —
+              по кнопке «Сохранить анкету» ниже.
+            </p>
+          )}
 
           <div className="kt-formgrid" style={{ marginTop: 22 }}>
             <div className="kt-field kt-formgrid--full">

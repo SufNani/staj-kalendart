@@ -204,7 +204,7 @@ export default function OrganizerDashboard() {
                               </Link>
                               {tab === 'upcoming' && (
                                 <>
-                                  <Link to="/organizer/create" className="kt-iconbtn" aria-label="Редактировать">
+                                  <Link to={`/organizer/create/${e.slug}`} className="kt-iconbtn" aria-label="Редактировать">
                                     <Icon name="edit" size={18} />
                                   </Link>
                                   <button className="kt-iconbtn" aria-label="Удалить" onClick={() => onDelete(e)}>

@@ -148,6 +148,7 @@
 .kt-collection__media {
   aspect-ratio: 16 / 11;
   overflow: hidden;
+  background: linear-gradient(135deg, var(--kt-cream-2), var(--kt-cream));
 }
 .kt-collection__media img {
   width: 100%;

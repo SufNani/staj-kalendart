@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import CatalogSection from '../components/CatalogSection'
-import { buildCollections } from '../data/events'
+import { useCollections } from '../store/useCollections'
 import heroShapeLeft from '../assets/hero/hero-shape-left.svg'
 import heroShapeRight from '../assets/hero/hero-shape-right.svg'
 
@@ -17,7 +17,13 @@ function pluralEvents(n) {
 
 function CollectionCard({ c }) {
   const navigate = useNavigate()
-  const go = () => navigate(`/catalog?category=${encodeURIComponent(c.category)}`)
+  // подборки на моках привязаны к категории — ведём в каталог по ней;
+  // подборки с сервера — произвольный список событий без категории,
+  // ведём на страницу самой подборки
+  const go = () =>
+    c.category
+      ? navigate(`/catalog?category=${encodeURIComponent(c.category)}`)
+      : navigate(`/collections/${c.id}`)
   return (
     <article
       className="kt-collection"
@@ -27,7 +33,7 @@ function CollectionCard({ c }) {
       onKeyDown={(e) => e.key === 'Enter' && go()}
     >
       <div className="kt-collection__media">
-        <img src={c.image} alt={c.title} loading="lazy" />
+        {c.image && <img src={c.image} alt={c.title} loading="lazy" />}
       </div>
       <div className="kt-collection__body">
         <h3 className="kt-collection__title">{c.title}</h3>
@@ -40,7 +46,7 @@ function CollectionCard({ c }) {
 function CollectionsCarousel() {
   const trackRef = useRef(null)
   const [index, setIndex] = useState(0)
-  const collections = buildCollections()
+  const { collections, loading, error } = useCollections()
 
   function scrollToCard(i) {
     const track = trackRef.current
@@ -65,6 +71,16 @@ function CollectionsCarousel() {
       }
     })
     if (best !== index) setIndex(best)
+  }
+
+  if (loading) {
+    return <div className="kt-catalog__empty">Загружаем подборки…</div>
+  }
+  if (error) {
+    return <div className="kt-catalog__empty">{error}</div>
+  }
+  if (collections.length === 0) {
+    return <div className="kt-catalog__empty">Подборок пока нет.</div>
   }
 
   return (
@@ -141,4 +157,3 @@ export default function LandingPage() {
     </>
   )
 }
-

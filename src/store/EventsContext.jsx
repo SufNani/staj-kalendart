@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
-import { EVENTS } from '../data/events'
+import { EVENTS, applyFormToEvent, formatDayLabel } from '../data/events'
 import { ORGANIZER } from '../data/site'
 import { USE_MOCKS } from '../config'
 import * as eventsApi from '../api/events'
@@ -115,7 +115,12 @@ export function EventsProvider({ children }) {
   const events = useMemo(() => {
     if (!USE_MOCKS) return remote
     const hiddenSet = new Set(hidden)
-    return [...created, ...buildSeed()].filter((e) => !hiddenSet.has(e.id))
+    // hidden относится только к сидовым событиям (см. removeEvent ниже) —
+    // «созданные»/отредактированные организатором в него не попадают,
+    // даже если у отредактированного события id совпадает с сидовым
+    // (см. updateEvent: правка сидового события переносит его в created).
+    const seed = buildSeed().filter((e) => !hiddenSet.has(e.id))
+    return [...created, ...seed]
   }, [remote, created, hidden])
 
   const addEvent = useCallback(
@@ -157,6 +162,76 @@ export function EventsProvider({ children }) {
     setMyRemote((prev) => prev.filter((e) => e.id !== id))
   }, [])
 
+  /**
+   * Правка существующего события (для «Редактировать событие»).
+   *  extraDates (опционально, только для USE_MOCKS): [{date, time}] —
+   *    если передан массив, доп. сеансы (кроме первого) пересобираются
+   *    из него; если не передан — существующие доп. сеансы не трогаем.
+   *  USE_MOCKS: если событие уже среди «созданных» — правим на месте;
+   *    если это событие из сида (демо-организатор) — переносим его в
+   *    «созданные» с тем же id, чтобы правки пережили перезагрузку
+   *    (и сразу прячем оригинал из сида через hidden, см. events выше).
+   *  API: PUT /api/event/{id}, обновляем локальный кэш (org_events и каталог).
+   */
+  const updateEvent = useCallback(async (id, form, extraDates) => {
+    if (USE_MOCKS) {
+      const buildExtraSessions = (baseId) =>
+        Array.isArray(extraDates)
+          ? extraDates
+              .filter((d) => d.date)
+              .map((d, i) => ({
+                id: `${baseId}-s${i + 2}`,
+                label: `Сеанс ${i + 2}`,
+                dayLabel: formatDayLabel(d.date),
+                timeLabel: d.time || '',
+                isoDate: d.date,
+                free: Math.max(0, Number(form.seats) || 0),
+                total: 0,
+              }))
+          : null // null = не трогаем существующие доп. сеансы
+
+      let updated = null
+      let migratedFromSeed = false
+      setCreated((prevCreated) => {
+        const idx = prevCreated.findIndex((e) => e.id === id)
+        if (idx !== -1) {
+          const base = applyFormToEvent(prevCreated[idx], form, true)
+          const extra = buildExtraSessions(prevCreated[idx].id)
+          updated = extra ? { ...base, sessions: [base.sessions[0], ...extra] } : base
+          const next = [...prevCreated]
+          next[idx] = updated
+          saveJSON(CREATED_KEY, next)
+          return next
+        }
+        const seedEvent = buildSeed().find((e) => e.id === id)
+        if (!seedEvent) return prevCreated
+        const base = applyFormToEvent(seedEvent, form, true)
+        const extra = buildExtraSessions(seedEvent.id)
+        updated = extra ? { ...base, sessions: [base.sessions[0], ...extra] } : base
+        migratedFromSeed = true
+        const next = [updated, ...prevCreated]
+        saveJSON(CREATED_KEY, next)
+        return next
+      })
+      if (!updated) {
+        throw new Error('Событие не найдено — возможно, оно уже было удалено.')
+      }
+      if (migratedFromSeed) {
+        setHidden((prevHidden) => {
+          if (prevHidden.includes(id)) return prevHidden
+          const next = [...prevHidden, id]
+          saveJSON(HIDDEN_KEY, next)
+          return next
+        })
+      }
+      return updated
+    }
+    const saved = await eventsApi.updateEvent(id, form)
+    setMyRemote((prev) => prev.map((e) => (e.id === saved.id ? saved : e)))
+    setRemote((prev) => prev.map((e) => (e.id === saved.id ? saved : e)))
+    return saved
+  }, [])
+
   // «Мои события»: в демо — по флагу mine, в API — из org_events (уже только свои)
   const mineAll = USE_MOCKS ? events.filter((e) => e.mine) : myRemote
 
@@ -169,12 +244,13 @@ export function EventsProvider({ children }) {
       getEvent: (slug) => events.find((e) => e.slug === slug),
       fetchEventById: eventsApi.fetchEvent, // для страницы события в режиме API
       addEvent,
+      updateEvent,
       removeEvent,
       reload,
       loading,
       error,
     }),
-    [events, mineAll, addEvent, removeEvent, reload, loading, error]
+    [events, mineAll, addEvent, updateEvent, removeEvent, reload, loading, error]
   )
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>

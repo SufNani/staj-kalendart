@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
-import { CATEGORIES, CITIES, makeEvent, formatDayLabel } from '../../data/events'
+import { CATEGORIES, CITIES, makeEvent, eventToForm, formatDayLabel } from '../../data/events'
 import { ORGANIZER } from '../../data/site'
 import { useEvents } from '../../store/EventsContext'
 import { USE_MOCKS } from '../../config'
 import { useProfile } from '../../store/ProfileContext'
 import { useAuth } from '../../store/AuthContext'
+import { fetchTags, uploadMedia } from '../../api/events'
 
 const empty = {
   title: '',
   category: '',
+  tagId: null, // реальный id тега с сервера (боевой режим)
   city: '',
   address: '',
   date: '',
@@ -19,11 +21,14 @@ const empty = {
   seats: '',
   price: '',
   description: '',
+  image: '',
 }
 
 export default function CreateEventPage() {
   const navigate = useNavigate()
-  const { addEvent } = useEvents()
+  const { slug: editSlug } = useParams() // есть только на /organizer/create/:slug
+  const isEditing = Boolean(editSlug)
+  const { addEvent, updateEvent, getEvent, fetchEventById, myEvents, historyEvents } = useEvents()
   const { organizerReady } = useProfile()
   const { loading: authLoading } = useAuth()
 
@@ -37,9 +42,110 @@ export default function CreateEventPage() {
   }, [authLoading, organizerReady, navigate])
 
   const [form, setForm] = useState(empty)
+  const [extraDates, setExtraDates] = useState([])
+
+  // --- редактирование: подгружаем существующее событие и заполняем форму ---
+  const [editingEvent, setEditingEvent] = useState(null)
+  const [loadingEvent, setLoadingEvent] = useState(isEditing)
+  const [loadEventError, setLoadEventError] = useState('')
+
+  useEffect(() => {
+    if (!editSlug) {
+      setEditingEvent(null)
+      setLoadingEvent(false)
+      setLoadEventError('')
+      return
+    }
+
+    setLoadingEvent(true)
+    setLoadEventError('')
+
+    // сначала — то, что уже есть под рукой (каталог/«Мои события»),
+    // чтобы форма заполнилась сразу, не дожидаясь сети
+    const local =
+      getEvent(editSlug) || [...myEvents, ...historyEvents].find((e) => e.slug === editSlug)
+
+    if (local) {
+      setEditingEvent(local)
+      const { form: filled, extraDates: filledExtra } = eventToForm(local)
+      setForm(filled)
+      setExtraDates(filledExtra)
+    }
+
+    if (USE_MOCKS) {
+      setLoadingEvent(false)
+      if (!local) setLoadEventError('Событие не найдено.')
+      return
+    }
+
+    // боевой режим: дотягиваем актуальную версию с сервера — то, что
+    // лежит в каталоге/org_events, может быть устаревшим кэшем
+    const apiId = local?.apiId ?? local?.id
+    if (apiId == null) {
+      setLoadingEvent(false)
+      if (!local) setLoadEventError('Событие не найдено.')
+      return
+    }
+    fetchEventById(apiId)
+      .then((fresh) => {
+        setEditingEvent(fresh)
+        const { form: filled, extraDates: filledExtra } = eventToForm(fresh)
+        setForm(filled)
+        setExtraDates(filledExtra)
+      })
+      .catch((err) => setLoadEventError(err.message || 'Не удалось загрузить событие.'))
+      .finally(() => setLoadingEvent(false))
+    // подгружаем заново только при смене редактируемого события —
+    // не хотим перезатирать правки пользователя на каждый ре-рендер
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSlug])
+
+  /**
+   * В боевом режиме категория — это не название, а конкретная строка
+   * в таблице тегов на сервере (нужен её id). Раньше мы держали свой
+   * список названий и пытались сопоставить его с тем, что вернёт
+   * сервер по имени — при малейшем расхождении в написании сервер
+   * отвечал 422 (tag_id: не число), потому что совпадения не было.
+   *
+   * Сейчас список категорий в форме приходит НАПРЯМУЮ с сервера
+   * (GET /api/tags/), поэтому в выпадающем списке всегда будут ровно
+   * те теги, что реально существуют в базе — что бы там ни лежало.
+   * Как только бэкендеры заведут настоящие категории вместо тестовых,
+   * здесь появятся именно они, без единой правки кода.
+   */
+  const [realTags, setRealTags] = useState([])
+  useEffect(() => {
+    if (USE_MOCKS) return
+    fetchTags().then(setRealTags).catch(() => {})
+  }, [])
+
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+
+  /** Загрузка обложки события.
+   *  Демо-режим: локальное превью (dataURL), на сервер ничего не уходит.
+   *  Боевой режим: реальная загрузка на POST /api/media/, в форму
+   *  сохраняется ссылка, которую вернул сервер. */
+  function onPhotoPick(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoError('')
+
+    if (USE_MOCKS) {
+      const reader = new FileReader()
+      reader.onload = () => set('image', reader.result)
+      reader.readAsDataURL(file)
+      return
+    }
+
+    setPhotoBusy(true)
+    uploadMedia(file)
+      .then((url) => set('image', url))
+      .catch((err) => setPhotoError(err.message || 'Не удалось загрузить фото.'))
+      .finally(() => setPhotoBusy(false))
+  }
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
-  const [extraDates, setExtraDates] = useState([])
   const [busy, setBusy] = useState(false)
 
   function set(key, value) {
@@ -88,7 +194,17 @@ function removeExtraDate(index) {
 
     setBusy(true)
     try {
-      if (USE_MOCKS) {
+      if (isEditing) {
+        const targetId = USE_MOCKS ? editingEvent.id : editingEvent.apiId ?? editingEvent.id
+        if (USE_MOCKS) {
+          await updateEvent(targetId, form, extraDates)
+        } else {
+          // боевой режим: как и при создании, отправляем форму как есть —
+          // перевод в тело PUT-запроса делает src/api/mappers.js
+          await updateEvent(targetId, form)
+        }
+        setToast('Изменения сохранены')
+      } else if (USE_MOCKS) {
         const event = makeEvent(form, ORGANIZER, publish)
 
         // все даты события: основная + дополнительные (для деления
@@ -115,12 +231,13 @@ function removeExtraDate(index) {
         if (!event.date && allDates[0]) event.date = allDates[0]
 
         await addEvent(event)
+        setToast(publish ? 'Событие опубликовано 🎉' : 'Черновик сохранён')
       } else {
         // боевой режим: отправляем данные формы на сервер как есть,
         // перевод в тело запроса делает src/api/mappers.js
         await addEvent(form)
+        setToast(publish ? 'Событие опубликовано 🎉' : 'Черновик сохранён')
       }
-      setToast(publish ? 'Событие опубликовано 🎉' : 'Черновик сохранён')
       setTimeout(() => navigate('/organizer'), 1000)
     } catch (err) {
       setError(err.message || 'Не удалось сохранить событие.')
@@ -130,18 +247,41 @@ function removeExtraDate(index) {
     }
   }
 
+  if (isEditing && loadingEvent) {
+    return (
+      <div className="kt-container" style={{ padding: '80px 0', textAlign: 'center' }}>
+        Загружаем событие…
+      </div>
+    )
+  }
+
+  if (isEditing && loadEventError) {
+    return (
+      <div className="kt-container" style={{ padding: '80px 0', textAlign: 'center' }}>
+        <h1 style={{ marginBottom: 16 }}>{loadEventError}</h1>
+        <Link to="/organizer" className="kt-btn kt-btn--gold">
+          К моим событиям
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="kt-container" style={{ paddingBlock: 28, maxWidth: 900 }}>
       <div className="kt-crumbs" style={{ paddingTop: 0, marginBottom: 16 }}>
         <Link to="/organizer">Мои события</Link>
         <Icon name="chevronRight" size={14} />
-        <span>Создание события</span>
+        <span>{isEditing ? 'Редактирование события' : 'Создание события'}</span>
       </div>
 
       <div className="kt-panel">
-        <h1 style={{ fontSize: 26, marginBottom: 6 }}>Создать событие</h1>
+        <h1 style={{ fontSize: 26, marginBottom: 6 }}>
+          {isEditing ? 'Редактировать событие' : 'Создать событие'}
+        </h1>
         <p className="kt-field__hint" style={{ marginBottom: 24 }}>
-          Заполните детали — клиенты увидят их на публичной странице.
+          {isEditing
+            ? 'Правки увидят все, кто уже открывал страницу события.'
+            : 'Заполните детали — клиенты увидят их на публичной странице.'}
         </p>
 
         {error && (
@@ -190,16 +330,37 @@ function removeExtraDate(index) {
             <select
               id="ce-cat"
               className="kt-select"
-              value={form.category}
-              onChange={(e) => set('category', e.target.value)}
+              value={USE_MOCKS ? form.category : form.tagId ?? ''}
+              onChange={(e) => {
+                if (USE_MOCKS) {
+                  set('category', e.target.value)
+                  return
+                }
+                // выбираем сразу и id (уйдёт на сервер), и имя (для отображения)
+                const id = e.target.value ? Number(e.target.value) : null
+                const tag = realTags.find((t) => t.id === id)
+                setForm((f) => ({ ...f, tagId: id, category: tag?.name || '' }))
+              }}
             >
               <option value="">Выберите категорию</option>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+              {USE_MOCKS
+                ? CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))
+                : realTags.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
             </select>
+            {!USE_MOCKS && realTags.length === 1 && (
+              <p className="kt-field__hint" style={{ color: 'var(--kt-busy)', marginTop: 6 }}>
+                На сервере пока только тестовая категория — это временно,
+                бэкендеры ещё не наполнили справочник настоящими.
+              </p>
+            )}
           </div>
                      
           <div className="kt-field">
@@ -373,10 +534,32 @@ function removeExtraDate(index) {
 
           <div className="kt-field">
             <label className="kt-field__label">Обложка события</label>
-            <div className="kt-uploadbox" onClick={() => setToast('Загрузка фото — на этапе интеграции с API')}>
-              <Icon name="plus" size={24} />
-              <span>Добавить фото</span>
-            </div>
+            <label className="kt-uploadbox" style={{ cursor: photoBusy ? 'wait' : 'pointer' }}>
+              {form.image ? (
+                <img
+                  src={form.image}
+                  alt=""
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                />
+              ) : (
+                <>
+                  <Icon name={photoBusy ? 'clock' : 'plus'} size={24} />
+                  <span>{photoBusy ? 'Загружаем…' : 'Добавить фото'}</span>
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                disabled={photoBusy}
+                onChange={onPhotoPick}
+              />
+            </label>
+            {photoError && (
+              <p className="kt-field__hint" style={{ color: 'var(--kt-danger)', marginTop: 6 }}>
+                {photoError}
+              </p>
+            )}
           </div>
 
           <div className="kt-field kt-formgrid--full">
@@ -396,11 +579,13 @@ function removeExtraDate(index) {
             className="kt-formgrid--full"
             style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}
           >
-            <button type="button" className="kt-btn kt-btn--ghost" onClick={() => save(false)} disabled={busy}>
-              Сохранить черновик
-            </button>
+            {!isEditing && (
+              <button type="button" className="kt-btn kt-btn--ghost" onClick={() => save(false)} disabled={busy}>
+                Сохранить черновик
+              </button>
+            )}
             <button type="submit" className="kt-btn kt-btn--gold kt-btn--lg" disabled={busy}>
-              {busy ? 'Сохраняем…' : 'Опубликовать событие'}
+              {busy ? 'Сохраняем…' : isEditing ? 'Сохранить изменения' : 'Опубликовать событие'}
             </button>
           </div>
         </form>

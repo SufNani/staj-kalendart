@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useProfile } from '../../store/ProfileContext'
+import { useAuth } from '../../store/AuthContext'
 import Icon from '../ui/Icon'
 
 function PasswordCard() {
@@ -122,7 +124,24 @@ function NotifyCard({ icon, name, hint, link, connected, onSetConnected }) {
 }
 
 function DeleteCard() {
+  const navigate = useNavigate()
+  const { deleteAccount } = useAuth()
   const [confirm, setConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function onDelete() {
+    setBusy(true)
+    setError('')
+    try {
+      await deleteAccount()
+      navigate('/')
+    } catch (err) {
+      setError(err.message || 'Не удалось удалить аккаунт.')
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="kt-panel kt-panel--danger" style={{ marginTop: 20 }}>
       <div className="kt-cabsection__title" style={{ marginBottom: 6 }}>Удаление аккаунта</div>
@@ -132,13 +151,26 @@ function DeleteCard() {
       {confirm ? (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontWeight: 600, color: 'var(--kt-danger)' }}>Точно удалить аккаунт?</span>
-          <button className="kt-btn kt-btn--danger kt-btn--sm">Да, удалить</button>
-          <button className="kt-btn kt-btn--ghost kt-btn--sm" onClick={() => setConfirm(false)}>Отмена</button>
+          <button className="kt-btn kt-btn--danger kt-btn--sm" onClick={onDelete} disabled={busy}>
+            {busy ? 'Удаляем…' : 'Да, удалить'}
+          </button>
+          <button
+            className="kt-btn kt-btn--ghost kt-btn--sm"
+            onClick={() => setConfirm(false)}
+            disabled={busy}
+          >
+            Отмена
+          </button>
         </div>
       ) : (
         <button className="kt-btn kt-btn--danger kt-btn--sm" onClick={() => setConfirm(true)}>
           <Icon name="trash" size={16} /> Удалить аккаунт
         </button>
+      )}
+      {error && (
+        <p style={{ color: 'var(--kt-danger)', fontWeight: 600, fontSize: 14, marginTop: 12 }}>
+          {error}
+        </p>
       )}
     </div>
   )

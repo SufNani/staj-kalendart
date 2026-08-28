@@ -68,6 +68,14 @@ export function AuthProvider({ children }) {
     setUser(null)
   }, [])
 
+  /** Удаление аккаунта. В API-режиме реально удаляет на сервере
+   *  (DELETE /api/users) и сбрасывает токен; в демо — просто выходит,
+   *  удалять на сервере нечего. */
+  const deleteAccount = useCallback(async () => {
+    if (!USE_MOCKS) await authApi.deleteAccount()
+    setUser(null)
+  }, [])
+
   /** Обновление профиля: имя/телефон/город/анкета студии.
    *  В API-режиме реально сохраняет на сервере (PATCH /api/users/profile).
    *  В демо-режиме просто держит правки в памяти на время сессии. */
@@ -82,8 +90,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, isAuth: Boolean(user), login, register, logout, updateUser }),
-    [user, loading, login, register, logout, updateUser]
+    () => ({ user, loading, isAuth: Boolean(user), login, register, logout, updateUser, deleteAccount }),
+    [user, loading, login, register, logout, updateUser, deleteAccount]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

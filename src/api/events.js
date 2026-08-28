@@ -16,7 +16,7 @@
    GET  /api/purchases/my      -> [запись]                                              (нужен токен)
 */
 
-import { api } from './client'
+import { api, API_BASE } from './client'
 import { ENDPOINTS } from './endpoints'
 import { eventFromApi, eventToApi, collectionFromApi, purchaseFromApi } from './mappers'
 
@@ -89,13 +89,26 @@ export async function fetchMyOrgEvents({ limit, offset } = {}) {
 
 /* --- создание / изменение / удаление --- */
 
+/**
+ * Если форма уже прислала настоящий tagId (выбран из живого списка
+ * с сервера — так теперь работает CreateEventPage) — используем его
+ * напрямую. Сопоставление по имени (resolveTagId) остаётся как
+ * подстраховка для случаев, когда tagId не пришёл.
+ */
+async function pickTagId(form) {
+  if (form.tagId !== undefined && form.tagId !== null && form.tagId !== '') {
+    return Number(form.tagId)
+  }
+  return resolveTagId(form.category)
+}
+
 export async function createEvent(form) {
-  const tagId = await resolveTagId(form.category)
+  const tagId = await pickTagId(form)
   return eventFromApi(await api.post(ENDPOINTS.events, eventToApi(form, tagId)))
 }
 
 export async function updateEvent(id, form) {
-  const tagId = await resolveTagId(form.category)
+  const tagId = await pickTagId(form)
   return eventFromApi(await api.put(ENDPOINTS.event(id), eventToApi(form, tagId)))
 }
 
@@ -140,4 +153,26 @@ export async function fetchMyPurchases() {
 export async function fetchCollections() {
   const data = await api.get(ENDPOINTS.collections, { auth: false })
   return listFrom(data).map(collectionFromApi)
+}
+
+/* --- загрузка файла (обложка события, логотип студии) ---
+   POST /api/media/ — точная схема в спеке не расписана (какое имя
+   поля ждёт форма, что именно возвращает ответ). Сделано по обычному
+   для таких ручек стандарту: multipart/form-data, поле "file".
+   Из ответа берём первое похожее на ссылку поле — если бэкенд
+   называет иначе, будет видно по первой же реальной попытке
+   (в консоли останется тело ответа), поправим один разбор здесь. */
+export async function uploadMedia(file) {
+  const body = new FormData()
+  body.append('file', file)
+  const data = await api.post(ENDPOINTS.media, body)
+  const url =
+    data?.url || data?.file_url || data?.path || data?.filename || data?.location
+  if (!url) {
+    console.warn('Не удалось найти ссылку в ответе /api/media/ — вот что пришло:', data)
+    throw new Error('Сервер загрузил файл, но не вернул ссылку на него (см. консоль).')
+  }
+  // если сервер вернул относительный путь — достраиваем через адрес API
+  // (не через адрес фронта — в проде это разные домены)
+  return url.startsWith('http') ? url : `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`
 }
